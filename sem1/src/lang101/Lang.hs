@@ -1,4 +1,4 @@
-module Main where
+module Lang where
 
 import Control.Monad
 import Data.Maybe
@@ -141,6 +141,4 @@ test101 =
     ]
   ]
 
-
-main = return ()
 

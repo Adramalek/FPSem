@@ -1,5 +1,8 @@
 module Parser where
 
+import Control.Applicative hiding (Const)
+import Lang
+
 newtype MyList a = MyList [a]
 instance Functor MyList where
   fmap f (MyList as) = MyList $ go as
@@ -57,8 +60,7 @@ instance Functor Parser where
 -- f <$> x = fmap f x
 
 instance Applicative Parser where
-  pure x = Parser $ pure (pure (pure x))
-           -- \s -> [(s,x)]
+  pure x = Parser $ \s -> [(s,x)]
   Parser pf <*> Parser px = Parser $ \s -> let
     frs = pf s
     in concatMap (\(t,f) -> map (\(rest,x) -> (rest, f x)) $ px t)
@@ -94,4 +96,72 @@ instance Applicative Parser where
 -- Parser pu <*> Parser $ \s -> [(s, y)] =
 -- u <*> pure y
 
+
+
+-- newtype Parser a = Parser { parse :: String -> [(String, a)]}
+
+char :: Char -> Parser Char
+char c = Parser $ \s -> case s of
+  [] -> []
+  d:ds | c == d -> [(ds,d)]
+       | otherwise -> []
+
+word :: String -> Parser String
+word [] = pure []
+word (w:ws) = (:) <$> char w <*> word ws
+-- f <$> a <*> b <*> c
+
+
+instance Alternative Parser where
+  empty = Parser $ \s -> []
+  pa <|> pb = Parser $ \s -> case parse pa s of
+    [] -> parse pb s
+    xs -> xs
+
+eoln :: Parser ()
+eoln = char '\n' *> pure ()
+
+oneOf :: [Char] -> Parser Char
+oneOf = foldr1 (<|>) . map char
+
+letter :: Parser Char
+letter = oneOf $ ['a'..'z'] ++ ['A'..'Z']
+
+sp = char ' '
+
+ignoreSpaces :: Parser a -> Parser a
+ignoreSpaces p = Parser $ \s ->
+  parse p $ filter (\c -> c /= ' ' && c /= '\n') s
+
+
+prolog :: Parser [PrologTerm]
+prolog = ignoreSpaces $ many term
+
+term :: Parser PrologTerm
+term = (sim <|> relation <|> implies) <* char '.'
+
+sim = Sim <$> simple
+
+simple :: Parser Simple
+simple =
+  ((\x xs -> Const $ x:xs) <$> oneOf ['a'..'z'] <*> many letter)
+  <|> ((\x xs -> Var $ x:xs) <$> oneOf ['A'..'Z'] <*> many letter)
+  <|> (const Any <$> char '_')
+
+relation = (\name _sp args _ep -> Relation name args)
+  <$> some letter
+  <*> char '('
+  <*> many (simple <* optional (char ','))
+  <*> char ')'
+
+implies = (\name _sp vars _ep _im _e args ->
+             Implies name vars args)
+  <$> some letter
+  <*> char '('
+  <*> many (some letter <* optional (char ','))
+  <*> char ')'
+  <*> word ":-"
+  <*> optional eoln
+  <*> many ((relation <|> sim <|> implies) <*
+            optional (char ','))
 
