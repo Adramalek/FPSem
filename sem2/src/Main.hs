@@ -1,5 +1,7 @@
 module Main where
 
+import Prelude hiding (readLn)
+
 import Types
 import Solution
 
@@ -82,6 +84,7 @@ fibo2 n = fst $ execState (statefulFibo2 n) (0,1)
 e.g. RWST r w s IO
 e.g. RWST (Int,Double) () Int IO
 -}
+{-
 monadStack :: ReaderT (Int, Double) (StateT Int IO) ()
 monadStack = do
   (x,y) <- ask
@@ -114,6 +117,73 @@ get = MySt $ \s -> (s, s)
 
 put :: s -> MySt s ()
 put s = MySt $ \_ -> ((), s)
+-}
+
+
+
+data Free f a = Free (f (Free f a))
+              | Pure a
+
+instance Functor f => Functor (Free f) where
+  fmap f (Pure a) = Pure $ f a
+  fmap f (Free ffree) = Free $ fmap f <$> ffree
+
+instance Functor f => Applicative (Free f) where
+  pure = Pure
+
+  Pure a <*> Pure b = Pure $ a b
+  Pure a <*> Free mb = Free $ fmap a <$> mb
+  Free ma <*> b = Free $ (<*> b) <$> ma
+
+instance Functor f => Monad (Free f) where
+  Pure a >>= f = f a
+  Free m >>= f = Free ((>>= f) <$> m)
+
+
+
+data CmdF next
+  = ReadLn (String -> next)
+  | WriteLn String next
+
+instance Functor CmdF where
+  fmap f (ReadLn next) = ReadLn $ f . next
+  fmap f (WriteLn s next) = WriteLn s $ f next
+
+
+type Cmd = Free CmdF
+
+cmd1 :: Cmd ()
+cmd1 = Free (ReadLn (\s -> Free (WriteLn s (Pure ()))))
+
+readLn = Free (ReadLn (\s -> Pure s))
+
+writeLn s = Free (WriteLn s (Pure ()))
+
+identity = readLn >>= writeLn
+
+cmd2 = do
+  x <- readLn
+  writeLn x
+  pure ()
+
+cmd3 = do
+  x <- readLn
+  identity
+  writeLn x
+
+interp1 :: Show a => Cmd a -> [String]
+interp1 (Pure a) = pure $ "Return: " ++ show a
+interp1 (Free (ReadLn ffree)) = "readLn abc" : interp1 (ffree "abc")
+interp1 (Free (WriteLn s next)) = ("writeLn " ++ s) : interp1 next
+
+interp2 :: Cmd () -> IO ()
+interp2 (Pure ()) = pure ()
+interp2 (Free (ReadLn ffree)) = getLine >>= interp2 . ffree
+interp2 (Free (WriteLn s next)) = putStrLn s >> interp2 next
+
+
+
+
 
 main :: IO ()
 main = do
@@ -121,5 +191,5 @@ main = do
   putStrLn "hello world"
   print $ runReader readerFun (5,6)
   print $ runState statefulFibo (5, (0,1))
-  runStateT (runReaderT monadStack (5,6)) 2 >>= print
+  -- runStateT (runReaderT monadStack (5,6)) 2 >>= print
 
