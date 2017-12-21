@@ -49,7 +49,7 @@ typeOf' ctx term = case term of
 			 (Just i) -> Right . snd $ ctx!!i
   (Natural n)       -> Right Nat 
   (Boolean b)       -> Right Bool
-  (Nil tp)          -> Right tp
+  (Nil tp)          -> Right . List $ tp
   (Add tm1 tm2)     -> equalTypes ctx Nat tm1 tm2
   (Mult tm1 tm2)    -> equalTypes ctx Nat tm1 tm2
   (And tm1 tm2)     -> equalTypes ctx Bool tm1 tm2 
